@@ -1,5 +1,6 @@
 import os
 import random
+import tempfile
 
 def get_list_of_ovpn_files(path):
     ovpn_files = []
@@ -10,8 +11,17 @@ def get_list_of_ovpn_files(path):
     return ovpn_files
 
 def connect_to_ovpn(profile_path, username, password):
-    command = f"openvpn --config {profile_path} --auth-user-pass <(echo '{username}\n{password}')"
+    # Create a temporary file to store username and password
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_file.write(f"{username}\n{password}".encode())
+    temp_file.close()
+
+    # Run OpenVPN with the temporary file
+    command = f"openvpn --config {profile_path} --auth-user-pass {temp_file.name}"
     os.system(command)
+
+    # Remove the temporary file after OpenVPN exits
+    os.unlink(temp_file.name)
 
 def disconnect_from_ovpn():
     os.system("pkill openvpn")
