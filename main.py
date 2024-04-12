@@ -1,4 +1,5 @@
 import os
+import random
 
 def get_list_of_ovpn_files(path):
     ovpn_files = []
@@ -17,26 +18,17 @@ def disconnect_from_ovpn():
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
-    if not ovpn_files:
-        print("No OpenVPN profiles found.")
-        return
-    
-    print("Available OpenVPN profiles:")
-    for idx, file in enumerate(ovpn_files):
-        print(f"{idx+1}. {file}")
-
-    choice = input("Enter the profile number to connect (0 to quit): ")
-    if choice == '0':
-        return
-    elif not choice.isdigit() or int(choice) < 1 or int(choice) > len(ovpn_files):
-        print("Invalid choice. Please enter a valid profile number.")
-        return
-
-    selected_profile = ovpn_files[int(choice) - 1]
     username = input("Enter your username: ")
     password = input("Enter your password: ")
 
-    connect_to_ovpn(f"./openvpn/{selected_profile}", username, password)
+    while True:
+        random.shuffle(ovpn_files)
+        for ovpn_file in ovpn_files:
+            connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password)
+            os.system("sleep 30")
+            disconnect_from_ovpn()
+            os.system("sleep 10")
+
 
 if __name__ == "__main__":
     main()
