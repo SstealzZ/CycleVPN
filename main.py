@@ -1,6 +1,9 @@
 import os
 import random
 import tempfile
+import subprocess
+import signal
+import time
 
 def get_list_of_ovpn_files(path):
     ovpn_files = []
@@ -17,8 +20,20 @@ def connect_to_ovpn(profile_path, username, password):
     temp_file.close()
 
     # Run OpenVPN with the temporary file
-    command = f"openvpn --config {profile_path} --auth-user-pass {temp_file.name}"
-    os.system(command)
+    command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name]
+    process = subprocess.Popen(command)
+
+    # Wait for the process to finish (or be interrupted)
+    try:
+        process.wait(timeout=30)  # Adjust timeout as needed
+    except subprocess.TimeoutExpired:
+        # If timeout expires, kill the process
+        process.terminate()
+        try:
+            process.wait(timeout=10)  # Wait for the process to terminate gracefully
+        except subprocess.TimeoutExpired:
+            # If it still doesn't terminate, force kill it
+            process.kill()
 
     # Remove the temporary file after OpenVPN exits
     os.unlink(temp_file.name)
@@ -35,10 +50,9 @@ def main():
         random.shuffle(ovpn_files)
         for ovpn_file in ovpn_files:
             connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password)
-            os.system("sleep 30")
+            time.sleep(10)  # Adjust sleep time as needed
             disconnect_from_ovpn()
-            os.system("sleep 10")
-
+            time.sleep(5)   # Adjust sleep time as needed
 
 if __name__ == "__main__":
     main()
