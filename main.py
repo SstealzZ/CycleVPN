@@ -42,6 +42,8 @@ def connect_to_ovpn(profile_path, username, password, time):
 
 def gestion_transmission(status):
     # Restart the Transmission service
+    if status == "start":
+        time.sleep(10)  # Wait for the VPN connection to be established
     command = ["service", "transmission", status]
     subprocess.run(command)
 
@@ -54,7 +56,6 @@ def main():
         random.shuffle(ovpn_files)
         for ovpn_file in ovpn_files:
             gestion_transmission("start")
-            time.sleep(5)   # Adjust sleep time as needed
             connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 30)
             gestion_transmission("stop")
             time.sleep(5)   # Adjust sleep time as needed
