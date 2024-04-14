@@ -70,7 +70,7 @@ def main():
         random.shuffle(ovpn_files)
         for ovpn_file in ovpn_files:
             gestion_transmission("start")
-            connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 30)
+            connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600)
             gestion_transmission("stop")
             time.sleep(5)   # Adjust sleep time as needed
 
