@@ -2,7 +2,6 @@ import os
 import random
 import tempfile
 import subprocess
-import signal
 import time
 import logging
 from colorama import init, Fore, Style
@@ -30,7 +29,7 @@ def connect_to_ovpn(profile_path, username, password, timeout):
     temp_file.close()
 
     # Run OpenVPN with the temporary file
-    command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name]
+    command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
     process = subprocess.Popen(command)
 
     # Wait for the process to finish (or be interrupted)
@@ -54,6 +53,8 @@ def connect_to_ovpn(profile_path, username, password, timeout):
     # Remove the temporary file after OpenVPN exits
     os.unlink(temp_file.name)
 
+    return process.returncode == 0
+
 def gestion_transmission(status):
     # Restart the Transmission service
     if status == "start":
@@ -66,13 +67,20 @@ def main():
     username = input("Enter your username: ")
     password = input("Enter your password: ")
 
-    while True:
-        random.shuffle(ovpn_files)
-        for ovpn_file in ovpn_files:
-            gestion_transmission("start")
-            connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600)
-            gestion_transmission("stop")
-            time.sleep(5)   # Adjust sleep time as needed
+    try:
+        while True:
+            random.shuffle(ovpn_files)
+            for ovpn_file in ovpn_files:
+                if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
+                    gestion_transmission("start")
+                    time.sleep(3600)  # Adjust sleep time to match VPN connection duration
+                    gestion_transmission("stop")
+                else:
+                    logging.error("Failed to establish VPN connection. Retrying with the next profile.")
+                time.sleep(5)  # Adjust sleep time as needed
+    except KeyboardInterrupt:
+        logging.info("Script interrupted by user.")
+        print(Fore.YELLOW + "[INFO] Script interrupted by user." + Style.RESET_ALL)
 
 if __name__ == "__main__":
     main()
