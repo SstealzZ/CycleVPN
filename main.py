@@ -1,86 +1,85 @@
+import os
+import random
+import tempfile
 import subprocess
 import time
 import logging
-from pathlib import Path
-import random
+from colorama import init, Fore, Style
 import getpass
 
-# Configurer les logs
-logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+# Initialize colorama to support ANSI escape character sequences for colored output
+init(autoreset=True)
 
-# Chemin vers le répertoire contenant les fichiers de configuration .ovpn
-CONFIG_DIRECTORY = Path('./openvpn')
+# Configure logging
+logging.basicConfig(filename='app.log', level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-# Liste des fichiers de configuration .ovpn
-VPN_SERVERS = [str(file) for file in CONFIG_DIRECTORY.glob('*.ovpn')]
+def get_list_of_ovpn_files(path):
+    ovpn_files = []
+    for file in os.listdir(path):
+        if file.endswith(".ovpn"):
+            ovpn_files.append(file)
+            logging.info(f"Found ovpn file: {file}")  # Log the found ovpn file
+    return ovpn_files
 
-# Demander les identifiants à l'utilisateur
-username = input("Enter your VPN username: ")
-password = getpass.getpass("Enter your VPN password: ")
+def connect_to_ovpn(profile_path, username, password, timeout):
+    logging.info(f"Connecting to {profile_path}...")  # Log the connection attempt
+    print(Fore.GREEN + f"[INFO] Connecting to {profile_path}..." + Style.RESET_ALL)  # Print info message in console
+    # Create a temporary file to store username and password
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_file.write(f"{username}\n{password}".encode())
+    temp_file.close()
 
-def start_vpn(config_file, username, password):
-    """Connect to the VPN using a specific configuration file."""
-    cmd = ['openvpn', '--config', config_file, '--auth-user-pass']
-    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    process.stdin.write(f'{username}\n{password}\n'.encode())
-    process.stdin.flush()
-    return process
+    # Run OpenVPN with the temporary file
+    command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
+    process = subprocess.Popen(command)
 
-def stop_vpn(process):
-    """Disconnect from the VPN."""
-    process.terminate()
-
-def check_vpn_connection():
-    """Check the current public IP address."""
+    # Wait for the process to finish (or be interrupted)
     try:
-        current_ip = subprocess.check_output(['curl', 'ifconfig.me']).decode().strip()
-        logging.info(f'Current IP: {current_ip}')
-        return current_ip
-    except subprocess.CalledProcessError as e:
-        logging.error('Error checking VPN connection: ' + str(e))
-        return None
+        process.wait(timeout=timeout)  # Adjust timeout as needed
+        logging.info("Connection successful.")  # Log successful connection
+        print(Fore.GREEN + "[INFO] Connection successful." + Style.RESET_ALL)  # Print success message in console
+    except subprocess.TimeoutExpired:
+        # If timeout expires, kill the process
+        process.terminate()
+        logging.error("Connection timed out.")  # Log connection timeout
+        print(Fore.RED + "[ERROR] Connection timed out." + Style.RESET_ALL)  # Print error message in console
 
-def switch_vpn(current_process, username, password):
-    """Switch to a random VPN server."""
-    if current_process:
-        manage_transmission('stop')  # Stop Transmission service before disconnecting VPN
-        stop_vpn(current_process)
-        logging.info('VPN disconnected.')
-        time.sleep(60)  # Wait for 1 minute before reconnecting
+        ## Process to kill the OpenVPN process (if needed)
+        try:
+            process.wait(timeout=10)  # Wait for the process to terminate gracefully
+        except subprocess.TimeoutExpired:
+            # If it still doesn't terminate, force kill it
+            process.kill()
 
-    new_server = random.choice(VPN_SERVERS)
-    logging.info(f'Connecting to VPN server: {new_server}')
-    vpn_process = start_vpn(new_server, username, password)
-    time.sleep(15)  # Wait for VPN to establish connection
-    manage_transmission('start')  # Start Transmission service after connecting VPN
-    return vpn_process
+    # Remove the temporary file after OpenVPN exits
+    os.unlink(temp_file.name)
 
-def manage_transmission(action):
-    """Manage Transmission service."""
-    if action not in ['start', 'stop', 'restart', 'status']:
-        logging.error(f'Invalid action for Transmission service: {action}')
-        return
-    cmd = ['service', 'transmission-daemon', action]
-    try:
-        subprocess.run(cmd, check=True)
-        logging.info(f'Transmission service {action}ed successfully.')
-    except subprocess.CalledProcessError as e:
-        logging.error(f'Failed to {action} Transmission service: ' + str(e))
+    return process.returncode == 0
+
+def gestion_transmission(status):
+    # Manage the Transmission service
+    command = ["service", "transmission", status]
+    subprocess.run(command, check=True)
 
 def main():
-    vpn_process = None
-    try:
-        vpn_process = switch_vpn(vpn_process, username, password)
-        while True:
-            time.sleep(3600)  # Wait for 1 hour before changing VPN
-            vpn_process = switch_vpn(vpn_process, username, password)
-    except KeyboardInterrupt:
-        logging.info('Script interrupted by user.')
-    finally:
-        if vpn_process:
-            manage_transmission('stop')  # Ensure Transmission is stopped before disconnecting VPN
-            stop_vpn(vpn_process)
-            logging.info('VPN disconnected.')
+    ovpn_files = get_list_of_ovpn_files("./openvpn")
+    username = input("Enter your username: ")
+    password = getpass.getpass("Enter your password: ")
 
-if __name__ == '__main__':
+    try:
+        while True:
+            random.shuffle(ovpn_files)
+            for ovpn_file in ovpn_files:
+                if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
+                    gestion_transmission("start")
+                    time.sleep(3600)  # Adjust sleep time to match VPN connection duration
+                    gestion_transmission("stop")
+                else:
+                    logging.error("Failed to establish VPN connection. Retrying with the next profile.")
+                time.sleep(5)  # Adjust sleep time as needed
+    except KeyboardInterrupt:
+        logging.info("Script interrupted by user.")
+        print(Fore.YELLOW + "[INFO] Script interrupted by user." + Style.RESET_ALL)
+
+if __name__ == "__main__":
     main()
