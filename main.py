@@ -20,7 +20,7 @@ password = getpass.getpass("Enter your VPN password: ")
 
 def start_vpn(config_file, username, password):
     """Connect to the VPN using a specific configuration file."""
-    cmd = ['sudo', 'openvpn', '--config', config_file, '--auth-user-pass']
+    cmd = ['openvpn', '--config', config_file, '--auth-user-pass']
     process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     process.stdin.write(f'{username}\n{password}\n'.encode())
     process.stdin.flush()
@@ -60,7 +60,7 @@ def manage_transmission(action):
     if action not in ['start', 'stop', 'restart', 'status']:
         logging.error(f'Invalid action for Transmission service: {action}')
         return
-    cmd = ['sudo', 'service', 'transmission-daemon', action]
+    cmd = ['service', 'transmission-daemon', action]
     try:
         subprocess.run(cmd, check=True)
         logging.info(f'Transmission service {action}ed successfully.')
