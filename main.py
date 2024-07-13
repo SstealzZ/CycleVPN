@@ -10,20 +10,32 @@ import getpass
 # Initialize colorama to support ANSI escape character sequences for colored output
 init(autoreset=True)
 
-# Configure logging
-logging.basicConfig(filename='app.log', level=logging.INFO, format='[%(levelname)s] %(message)s')
+# Configure logging with time
+logging.basicConfig(
+    filename='app.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+def log_and_print(message, level="info", color=Fore.RESET):
+    """Log a message and print it with a specific color."""
+    print(color + message + Style.RESET_ALL)
+    if level == "info":
+        logging.info(message)
+    elif level == "error":
+        logging.error(message)
 
 def get_list_of_ovpn_files(path):
     ovpn_files = []
     for file in os.listdir(path):
         if file.endswith(".ovpn"):
             ovpn_files.append(file)
-            logging.info(f"Found ovpn file: {file}")  # Log the found ovpn file
+            log_and_print(f"Found ovpn file: {file}", color=Fore.CYAN)
     return ovpn_files
 
 def connect_to_ovpn(profile_path, username, password, timeout):
-    logging.info(f"Connecting to {profile_path}...")  # Log the connection attempt
-    print(Fore.GREEN + f"[INFO] Connecting to {profile_path}..." + Style.RESET_ALL)  # Print info message in console
+    log_and_print(f"Connecting to {profile_path}...", color=Fore.GREEN)
     # Create a temporary file to store username and password
     temp_file = tempfile.NamedTemporaryFile(delete=False)
     temp_file.write(f"{username}\n{password}".encode())
@@ -36,13 +48,11 @@ def connect_to_ovpn(profile_path, username, password, timeout):
     # Wait for the process to finish (or be interrupted)
     try:
         process.wait(timeout=timeout)  # Adjust timeout as needed
-        logging.info("Connection successful.")  # Log successful connection
-        print(Fore.GREEN + "[INFO] Connection successful." + Style.RESET_ALL)  # Print success message in console
+        log_and_print("Connection successful.", color=Fore.GREEN)
     except subprocess.TimeoutExpired:
         # If timeout expires, kill the process
         process.terminate()
-        logging.error("Connection timed out.")  # Log connection timeout
-        print(Fore.RED + "[ERROR] Connection timed out." + Style.RESET_ALL)  # Print error message in console
+        log_and_print("Connection timed out.", level="error", color=Fore.RED)
 
         ## Process to kill the OpenVPN process (if needed)
         try:
@@ -58,8 +68,13 @@ def connect_to_ovpn(profile_path, username, password, timeout):
 
 def gestion_transmission(status):
     # Manage the Transmission service
+    log_and_print(f"Transmission service {status}...", color=Fore.YELLOW)
     command = ["service", "transmission", status]
-    subprocess.run(command, check=True)
+    try:
+        subprocess.run(command, check=True)
+        log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW)
+    except subprocess.CalledProcessError as e:
+        log_and_print(f"Failed to {status} Transmission service: {str(e)}", level="error", color=Fore.RED)
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
@@ -75,11 +90,10 @@ def main():
                     time.sleep(3600)  # Adjust sleep time to match VPN connection duration
                     gestion_transmission("stop")
                 else:
-                    logging.error("Failed to establish VPN connection. Retrying with the next profile.")
+                    log_and_print("Failed to establish VPN connection. Retrying with the next profile.", level="error", color=Fore.RED)
                 time.sleep(5)  # Adjust sleep time as needed
     except KeyboardInterrupt:
-        logging.info("Script interrupted by user.")
-        print(Fore.YELLOW + "[INFO] Script interrupted by user." + Style.RESET_ALL)
+        log_and_print("Script interrupted by user.", color=Fore.YELLOW)
 
 if __name__ == "__main__":
     main()
