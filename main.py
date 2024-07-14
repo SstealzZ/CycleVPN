@@ -4,6 +4,7 @@ import tempfile
 import subprocess
 import time
 import logging
+import threading
 from colorama import init, Fore, Style
 import getpass
 
@@ -46,6 +47,13 @@ def get_list_of_ovpn_files(path):
         log_and_print("No .ovpn files found.", level="warning", color=Fore.YELLOW)
     return ovpn_files
 
+def run_command(command):
+    log_and_print(f"Running command: {' '.join(command)}", level="debug", color=Fore.BLUE)
+    result = subprocess.run(command, capture_output=True, text=True)
+    log_and_print(f"Command stdout: {result.stdout}", level="debug", color=Fore.BLUE)
+    log_and_print(f"Command stderr: {result.stderr}", level="debug", color=Fore.BLUE)
+    return result.returncode, result.stdout, result.stderr
+
 def connect_to_ovpn(profile_path, username, password, timeout):
     log_and_print(f"Connecting to {profile_path}...", color=Fore.GREEN, level="info")
     temp_file = tempfile.NamedTemporaryFile(delete=False)
@@ -54,32 +62,19 @@ def connect_to_ovpn(profile_path, username, password, timeout):
         temp_file.close()
 
         command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
-        log_and_print(f"Running command: {' '.join(command)}", level="debug", color=Fore.BLUE)
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return_code, stdout, stderr = run_command(command)
 
-        start_time = time.time()
-        while True:
-            if process.poll() is not None:
-                stdout, stderr = process.communicate()
-                log_and_print(f"OpenVPN stdout: {stdout.decode()}", level="debug", color=Fore.BLUE)
-                log_and_print(f"OpenVPN stderr: {stderr.decode()}", level="debug", color=Fore.BLUE)
-                if process.returncode == 0:
-                    log_and_print("Connection successful.", color=Fore.GREEN, level="info")
-                    ip_address = get_public_ip()
-                    log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
-                    return True
-                else:
-                    log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
-                    return False
-            if time.time() - start_time > timeout:
-                process.terminate()
-                log_and_print("Connection timed out.", level="error", color=Fore.RED)
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                return False
-            time.sleep(1)
+        log_and_print(f"OpenVPN stdout: {stdout}", level="debug", color=Fore.BLUE)
+        log_and_print(f"OpenVPN stderr: {stderr}", level="debug", color=Fore.BLUE)
+
+        if return_code == 0:
+            log_and_print("Connection successful.", color=Fore.GREEN, level="info")
+            ip_address = get_public_ip()
+            log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
+            return True
+        else:
+            log_and_print(f"OpenVPN error: {stderr}", level="error", color=Fore.RED)
+            return False
     except Exception as e:
         log_and_print(f"An error occurred: {str(e)}", level="error", color=Fore.RED)
         return False
@@ -89,31 +84,30 @@ def connect_to_ovpn(profile_path, username, password, timeout):
 
 def get_public_ip():
     try:
-        result = subprocess.run(["curl", "ifconfig.io"], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
+        return_code, stdout, stderr = run_command(["curl", "ifconfig.io"])
+        if return_code == 0:
+            return stdout.strip()
+        else:
+            log_and_print(f"Failed to retrieve public IP: {stderr}", level="error", color=Fore.RED)
+            return "Unknown"
+    except Exception as e:
         log_and_print(f"Failed to retrieve public IP: {str(e)}", level="error", color=Fore.RED)
         return "Unknown"
 
 def gestion_transmission(status):
     log_and_print(f"Transmission service {status}...", color=Fore.YELLOW, level="info")
-    command = ["service", "transmission", status]
-    try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return_code, stdout, stderr = run_command(["service", "transmission", status])
+    if return_code == 0:
         log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW, level="info")
-        log_and_print(f"Transmission stdout: {result.stdout.decode()}", level="debug", color=Fore.BLUE)
-        log_and_print(f"Transmission stderr: {result.stderr.decode()}", level="debug", color=Fore.BLUE)
-    except subprocess.CalledProcessError as e:
-        log_and_print(f"Failed to {status} Transmission service: {str(e)}", level="error", color=Fore.RED)
-        log_and_print(f"Transmission stderr: {e.stderr.decode()}", level="debug", color=Fore.BLUE)
+    else:
+        log_and_print(f"Failed to {status} Transmission service: {stderr}", level="error", color=Fore.RED)
 
 def is_transmission_running():
-    try:
-        result = subprocess.run(["service", "transmission", "status"], capture_output=True, text=True, check=True)
-        log_and_print(f"Transmission status check: {result.stdout}", level="debug", color=Fore.BLUE)
-        return "is running" in result.stdout
-    except subprocess.CalledProcessError as e:
-        log_and_print(f"Failed to check Transmission status: {str(e)}", level="error", color=Fore.RED)
+    return_code, stdout, stderr = run_command(["service", "transmission", "status"])
+    if return_code == 0 and "is running" in stdout:
+        return True
+    else:
+        log_and_print(f"Transmission status check failed: {stderr}", level="error", color=Fore.RED)
         return False
 
 def main():
