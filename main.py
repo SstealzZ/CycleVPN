@@ -18,6 +18,13 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+def kill_switch(current_ip, vpn_ip):
+    if current_ip == vpn_ip:
+        log_and_print("VPN connection failed. Exiting...", level="error", color=Fore.RED)
+        manage_service("transmission", "stop")
+        manage_service("openvpn", "stop")
+        exit()
+
 def get_ip():
     try:
         ip = subprocess.check_output(["curl", "ifconfig.io"])
@@ -56,7 +63,8 @@ def run_command(command):
         time.sleep(0.1)
 
 def core(ovpn_file, username, password, cooldown_seconds):
-    log_and_print(f"Current IP: {get_ip()}", color=Fore.CYAN)
+    my_ip = get_ip()
+    log_and_print(f"Current IP: {my_ip}", color=Fore.CYAN)
     log_and_print(f"Connecting to VPN server using {ovpn_file}...", color=Fore.GREEN)
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
         temp_file.write(f"{username}\n{password}")
@@ -65,7 +73,8 @@ def core(ovpn_file, username, password, cooldown_seconds):
         command = ["openvpn", "--config", f"./openvpn/{ovpn_file}", "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         time.sleep(5)  # Wait for the VPN connection to establish
-        log_and_print(f"VPN IP: {get_ip()}", color=Fore.CYAN)
+        vpn_ip = get_ip()
+        log_and_print(f"VPN IP: {vpn_ip}", color=Fore.CYAN)
         manage_service("transmission", "start")
         log_and_print("Transmission service started.", color=Fore.GREEN)
         
