@@ -1,7 +1,6 @@
 import os
 import random
 import tempfile
-import subprocess
 import time
 import logging
 import threading
@@ -48,11 +47,12 @@ def get_list_of_ovpn_files(path):
     return ovpn_files
 
 def run_command(command):
-    log_and_print(f"Running command: {' '.join(command)}", level="debug", color=Fore.BLUE)
-    result = subprocess.run(command, capture_output=True, text=True)
-    log_and_print(f"Command stdout: {result.stdout}", level="debug", color=Fore.BLUE)
-    log_and_print(f"Command stderr: {result.stderr}", level="debug", color=Fore.BLUE)
-    return result.returncode, result.stdout, result.stderr
+    log_and_print(f"Running command: {command}", level="debug", color=Fore.BLUE)
+    stream = os.popen(command)
+    output = stream.read()
+    stream.close()
+    log_and_print(f"Command output: {output}", level="debug", color=Fore.BLUE)
+    return output
 
 def connect_to_ovpn(profile_path, username, password, timeout):
     log_and_print(f"Connecting to {profile_path}...", color=Fore.GREEN, level="info")
@@ -61,19 +61,17 @@ def connect_to_ovpn(profile_path, username, password, timeout):
         temp_file.write(f"{username}\n{password}".encode())
         temp_file.close()
 
-        command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
-        return_code, stdout, stderr = run_command(command)
+        command = f"openvpn --config {profile_path} --auth-user-pass {temp_file.name} --mute-replay-warnings"
+        output = run_command(command)
+        log_and_print(f"OpenVPN output: {output}", level="debug", color=Fore.BLUE)
 
-        log_and_print(f"OpenVPN stdout: {stdout}", level="debug", color=Fore.BLUE)
-        log_and_print(f"OpenVPN stderr: {stderr}", level="debug", color=Fore.BLUE)
-
-        if return_code == 0:
+        if "Initialization Sequence Completed" in output:
             log_and_print("Connection successful.", color=Fore.GREEN, level="info")
             ip_address = get_public_ip()
             log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
             return True
         else:
-            log_and_print(f"OpenVPN error: {stderr}", level="error", color=Fore.RED)
+            log_and_print("Failed to connect to VPN.", level="error", color=Fore.RED)
             return False
     except Exception as e:
         log_and_print(f"An error occurred: {str(e)}", level="error", color=Fore.RED)
@@ -84,31 +82,24 @@ def connect_to_ovpn(profile_path, username, password, timeout):
 
 def get_public_ip():
     try:
-        return_code, stdout, stderr = run_command(["curl", "ifconfig.io"])
-        if return_code == 0:
-            return stdout.strip()
-        else:
-            log_and_print(f"Failed to retrieve public IP: {stderr}", level="error", color=Fore.RED)
-            return "Unknown"
+        output = run_command("curl ifconfig.io")
+        return output.strip()
     except Exception as e:
         log_and_print(f"Failed to retrieve public IP: {str(e)}", level="error", color=Fore.RED)
         return "Unknown"
 
 def gestion_transmission(status):
     log_and_print(f"Transmission service {status}...", color=Fore.YELLOW, level="info")
-    return_code, stdout, stderr = run_command(["service", "transmission", status])
-    if return_code == 0:
+    output = run_command(f"service transmission {status}")
+    if "done" in output or "ok" in output:
         log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW, level="info")
     else:
-        log_and_print(f"Failed to {status} Transmission service: {stderr}", level="error", color=Fore.RED)
+        log_and_print(f"Failed to {status} Transmission service: {output}", level="error", color=Fore.RED)
 
 def is_transmission_running():
-    return_code, stdout, stderr = run_command(["service", "transmission", "status"])
-    if return_code == 0 and "is running" in stdout:
-        return True
-    else:
-        log_and_print(f"Transmission status check failed: {stderr}", level="error", color=Fore.RED)
-        return False
+    output = run_command("service transmission status")
+    log_and_print(f"Transmission status check: {output}", level="debug", color=Fore.BLUE)
+    return "is running" in output
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
