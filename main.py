@@ -61,6 +61,9 @@ def connect_to_ovpn(profile_path, username, password, timeout):
             stdout, stderr = process.communicate(timeout=timeout)
             if process.returncode == 0:
                 log_and_print("Connection successful.", color=Fore.GREEN, level="info")
+                # Log the IP address after successful connection
+                ip_address = get_public_ip()
+                log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
             else:
                 log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
         except subprocess.TimeoutExpired:
@@ -83,6 +86,14 @@ def connect_to_ovpn(profile_path, username, password, timeout):
         os.unlink(temp_file.name)
         log_and_print(f"Temporary file {temp_file.name} deleted.", level="debug", color=Fore.BLUE)
 
+def get_public_ip():
+    try:
+        result = subprocess.run(["curl", "ifconfig.io"], capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        log_and_print(f"Failed to retrieve public IP: {str(e)}", level="error", color=Fore.RED)
+        return "Unknown"
+
 def gestion_transmission(status):
     log_and_print(f"Transmission service {status}...", color=Fore.YELLOW, level="info")
     command = ["service", "transmission", status]
@@ -90,6 +101,7 @@ def gestion_transmission(status):
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW, level="info")
         log_and_print(f"Transmission stdout: {result.stdout.decode()}", level="debug", color=Fore.BLUE)
+        log_and_print(f"Transmission stderr: {result.stderr.decode()}", level="debug", color=Fore.BLUE)
     except subprocess.CalledProcessError as e:
         log_and_print(f"Failed to {status} Transmission service: {str(e)}", level="error", color=Fore.RED)
         log_and_print(f"Transmission stderr: {e.stderr.decode()}", level="debug", color=Fore.BLUE)
@@ -112,6 +124,7 @@ def main():
                 
                 log_and_print(f"Attempting to connect using profile: {ovpn_file}", level="info", color=Fore.BLUE)
                 if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
+                    log_and_print(f"Starting Transmission service after successful VPN connection.", level="info", color=Fore.YELLOW)
                     gestion_transmission("start")
                     time.sleep(3600)
                 else:
