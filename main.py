@@ -57,29 +57,29 @@ def connect_to_ovpn(profile_path, username, password, timeout):
         log_and_print(f"Running command: {' '.join(command)}", level="debug", color=Fore.BLUE)
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-            if process.returncode == 0:
-                log_and_print("Connection successful.", color=Fore.GREEN, level="info")
-                # Log the IP address after successful connection
-                ip_address = get_public_ip()
-                log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
-                return True
-            else:
-                log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
-        except subprocess.TimeoutExpired:
-            process.terminate()
-            log_and_print("Connection timed out.", level="error", color=Fore.RED)
-
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-
-            log_and_print(f"OpenVPN stdout: {stdout.decode()}", level="debug", color=Fore.BLUE)
-            log_and_print(f"OpenVPN stderr: {stderr.decode()}", level="debug", color=Fore.BLUE)
-
-        return False
+        start_time = time.time()
+        while True:
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                log_and_print(f"OpenVPN stdout: {stdout.decode()}", level="debug", color=Fore.BLUE)
+                log_and_print(f"OpenVPN stderr: {stderr.decode()}", level="debug", color=Fore.BLUE)
+                if process.returncode == 0:
+                    log_and_print("Connection successful.", color=Fore.GREEN, level="info")
+                    ip_address = get_public_ip()
+                    log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
+                    return True
+                else:
+                    log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
+                    return False
+            if time.time() - start_time > timeout:
+                process.terminate()
+                log_and_print("Connection timed out.", level="error", color=Fore.RED)
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                return False
+            time.sleep(1)
     except Exception as e:
         log_and_print(f"An error occurred: {str(e)}", level="error", color=Fore.RED)
         return False
@@ -110,10 +110,8 @@ def gestion_transmission(status):
 def is_transmission_running():
     try:
         result = subprocess.run(["service", "transmission", "status"], capture_output=True, text=True, check=True)
-        if "is running" in result.stdout:
-            return True
-        else:
-            return False
+        log_and_print(f"Transmission status check: {result.stdout}", level="debug", color=Fore.BLUE)
+        return "is running" in result.stdout
     except subprocess.CalledProcessError as e:
         log_and_print(f"Failed to check Transmission status: {str(e)}", level="error", color=Fore.RED)
         return False
