@@ -1,9 +1,9 @@
 import os
 import random
+import subprocess
 import tempfile
 import time
 import logging
-import threading
 from colorama import init, Fore, Style
 import getpass
 
@@ -13,100 +13,75 @@ init(autoreset=True)
 # Configure logging with time
 logging.basicConfig(
     filename='app.log',
-    level=logging.DEBUG,  # Change to DEBUG to capture more detailed logs
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+def get_ip():
+    try:
+        ip = subprocess.check_output(["curl", "ifconfig.io"])
+        return ip.decode().strip()
+    except subprocess.CalledProcessError as e:
+        log_and_print(f"Failed to get IP: {e}", level="error", color=Fore.RED)
+        return None
+
 def log_and_print(message, level="info", color=Fore.RESET):
     """Log a message and print it with a specific color."""
     print(color + message + Style.RESET_ALL)
-    if level == "debug":
-        logging.debug(message)
-    elif level == "info":
+    if level == "info":
         logging.info(message)
-    elif level == "warning":
-        logging.warning(message)
     elif level == "error":
         logging.error(message)
-    elif level == "critical":
-        logging.critical(message)
 
 def get_list_of_ovpn_files(path):
-    log_and_print(f"Scanning directory for .ovpn files: {path}", level="debug", color=Fore.BLUE)
-    ovpn_files = []
-    if not os.path.isdir(path):
-        log_and_print(f"Directory does not exist: {path}", level="error", color=Fore.RED)
-        return ovpn_files
-    for file in os.listdir(path):
-        if file.endswith(".ovpn"):
-            ovpn_files.append(file)
-            log_and_print(f"Found ovpn file: {file}", color=Fore.CYAN, level="debug")
-    if not ovpn_files:
-        log_and_print("No .ovpn files found.", level="warning", color=Fore.YELLOW)
+    ovpn_files = [file for file in os.listdir(path) if file.endswith(".ovpn")]
+    for file in ovpn_files:
+        log_and_print(f"Found ovpn file: {file}", color=Fore.CYAN)
     return ovpn_files
 
-def run_command(command):
-    log_and_print(f"Running command: {command}", level="debug", color=Fore.BLUE)
-    stream = os.popen(command)
-    output = stream.read()
-    stream.close()
-    log_and_print(f"Command output: {output}", level="debug", color=Fore.BLUE)
-    return output
+def manage_service(service, action):
+    log_and_print(f"{service.capitalize()} service is {action}.", color=Fore.GREEN)
+    command = ["service", service, action]
+    run_command(command)
 
-def connect_to_ovpn(profile_path, username, password, timeout):
-    log_and_print(f"Connecting to {profile_path}...", color=Fore.GREEN, level="info")
-    temp_file = tempfile.NamedTemporaryFile(delete=False)
-    try:
+def run_command(command):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    while True:
+        output = process.stdout.readline()
+        if process.poll() is not None:
+            break
+        if output:
+            log_and_print(output.decode().strip(), color=Fore.GREEN)
+        time.sleep(0.1)
+
+def cooldown(seconds, ip_local, ip_vpn):
+    log_and_print(f"Cooldown for {seconds} seconds...", color=Fore.GREEN)
+    if ip_local != ip_vpn:
+        log_and_print("VPN connection established.", color=Fore.GREEN)
+    else:
+        log_and_print("VPN connection failed.", color=Fore.RED)
+        manage_service("transmission", "stop")
+        run_command(["pkill", "openvpn"])
+    time.sleep(seconds)
+
+def core(ovpn_file, username, password):
+    log_and_print(f"Connecting to VPN server using {ovpn_file}...", color=Fore.GREEN)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
         temp_file.write(f"{username}\n{password}".encode())
         temp_file.close()
 
-        command = f"openvpn --config {profile_path} --auth-user-pass {temp_file.name} --mute-replay-warnings"
-        output = run_command(command)
-        log_and_print(f"OpenVPN output: {output}", level="debug", color=Fore.BLUE)
-
-        if "Initialization Sequence Completed" in output:
-            log_and_print("Connection successful.", color=Fore.GREEN, level="info")
-            ip_address = get_public_ip()
-            log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
-            return True
-        else:
-            log_and_print("Failed to connect to VPN.", level="error", color=Fore.RED)
-            return False
-    except Exception as e:
-        log_and_print(f"An error occurred: {str(e)}", level="error", color=Fore.RED)
-        return False
-    finally:
-        os.unlink(temp_file.name)
-        log_and_print(f"Temporary file {temp_file.name} deleted.", level="debug", color=Fore.BLUE)
-
-def get_public_ip():
-    try:
-        output = run_command("curl ifconfig.io")
-        return output.strip()
-    except Exception as e:
-        log_and_print(f"Failed to retrieve public IP: {str(e)}", level="error", color=Fore.RED)
-        return "Unknown"
-
-def gestion_transmission(status):
-    log_and_print(f"Transmission service {status}...", color=Fore.YELLOW, level="info")
-    output = run_command(f"service transmission {status}")
-    if "done" in output or "ok" in output:
-        log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW, level="info")
-    else:
-        log_and_print(f"Failed to {status} Transmission service: {output}", level="error", color=Fore.RED)
-
-def is_transmission_running():
-    output = run_command("service transmission status")
-    log_and_print(f"Transmission status check: {output}", level="debug", color=Fore.BLUE)
-    return "is running" in output
+        try:
+            command = ["openvpn", "--config", f"./openvpn/{ovpn_file}", "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
+            run_command(command)
+            log_and_print("VPN connection closed.", color=Fore.YELLOW)
+        except Exception as e:
+            log_and_print(f"Error: {e}", level="error", color=Fore.RED)
+        finally:
+            os.remove(temp_file.name)
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
-    if not ovpn_files:
-        log_and_print("No VPN profiles found. Exiting...", level="critical", color=Fore.RED)
-        return
-
     username = input("Enter your username: ")
     password = getpass.getpass("Enter your password: ")
 
@@ -114,30 +89,16 @@ def main():
         while True:
             random.shuffle(ovpn_files)
             for ovpn_file in ovpn_files:
-                log_and_print(f"Stopping Transmission service before VPN connection.", level="info", color=Fore.YELLOW)
-                gestion_transmission("stop")
-                
-                log_and_print(f"Attempting to connect using profile: {ovpn_file}", level="info", color=Fore.BLUE)
-                if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
-                    log_and_print(f"Starting Transmission service after successful VPN connection.", level="info", color=Fore.YELLOW)
-                    gestion_transmission("start")
-                    
-                    # Check every 10 minutes if Transmission is running
-                    for _ in range(6):  # 6 iterations to cover the 60-minute period
-                        time.sleep(600)  # Sleep for 10 minutes
-                        if not is_transmission_running():
-                            log_and_print("Transmission service is not running. Restarting...", level="warning", color=Fore.YELLOW)
-                            gestion_transmission("start")
-                else:
-                    log_and_print("Failed to establish VPN connection. Retrying with the next profile.", level="error", color=Fore.RED)
-                
-                log_and_print(f"Stopping Transmission service after VPN disconnection.", level="info", color=Fore.YELLOW)
-                gestion_transmission("stop")
-                time.sleep(5)  # Wait briefly before trying the next profile
+                manage_service("transmission", "stop")
+                ip_local = get_ip()
+                if ip_local:
+                    core(ovpn_file, username, password)
+                    ip_vpn = get_ip()
+                    if ip_vpn:
+                        cooldown(20, ip_local, ip_vpn)
+                        run_command(["pkill", "openvpn"])
     except KeyboardInterrupt:
-        log_and_print("Script interrupted by user.", color=Fore.YELLOW, level="warning")
-        log_and_print(f"Stopping Transmission service due to script interruption.", level="info", color=Fore.YELLOW)
-        gestion_transmission("stop")
+        log_and_print("Script interrupted by user.", color=Fore.YELLOW)
 
 if __name__ == "__main__":
     main()
