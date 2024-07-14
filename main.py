@@ -65,7 +65,8 @@ def cooldown(seconds, ip_local, ip_vpn):
         run_command(["pkill", "openvpn"])
     time.sleep(seconds)
 
-def core(ovpn_file, username, password):
+def core(ovpn_file, username, password, cooldown_seconds):
+    log_and_print(f"Current IP: {get_ip()}", color=Fore.CYAN)
     log_and_print(f"Connecting to VPN server using {ovpn_file}...", color=Fore.GREEN)
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
         temp_file.write(f"{username}\n{password}")
@@ -73,13 +74,28 @@ def core(ovpn_file, username, password):
     try:
         command = ["openvpn", "--config", f"./openvpn/{ovpn_file}", "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        start_time = time.time()
         while True:
             output = process.stdout.readline()
             if process.poll() is not None:
                 break
             if output:
                 log_and_print(output.decode().strip(), color=Fore.GREEN)
+                log_and_print(f"VPN IP: {get_ip()}", color=Fore.CYAN)
+                manage_service("transmission", "start")
+                log_and_print("Transmission service started.", color=Fore.GREEN)
             time.sleep(0.1)
+            
+            # Check if cooldown time has passed
+            if time.time() - start_time > cooldown_seconds:
+                log_and_print("Cooldown period reached, terminating VPN connection.", color=Fore.YELLOW)
+                manage_service("transmission", "stop")
+                log_and_print("Transmission service stopped.", color=Fore.YELLOW)
+                process.terminate()
+                break
+        
+        process.wait()  # Ensure the process has terminated
         log_and_print("VPN connection closed.", color=Fore.YELLOW)
     except Exception as e:
         log_and_print(f"Error: {e}", level="error", color=Fore.RED)
@@ -90,19 +106,15 @@ def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
     username = input("Enter your username: ")
     password = getpass.getpass("Enter your password: ")
+    cooldown_seconds = 20
 
     try:
         while True:
             random.shuffle(ovpn_files)
             for ovpn_file in ovpn_files:
                 manage_service("transmission", "stop")
-                ip_local = get_ip()
-                if ip_local:
-                    core(ovpn_file, username, password)
-                    ip_vpn = get_ip()
-                    if ip_vpn:
-                        cooldown(20, ip_local, ip_vpn)
-                        run_command(["pkill", "openvpn"])
+                core(ovpn_file, username, password, cooldown_seconds)
+
     except KeyboardInterrupt:
         log_and_print("Script interrupted by user.", color=Fore.YELLOW)
 
