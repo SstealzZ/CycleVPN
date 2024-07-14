@@ -64,6 +64,7 @@ def connect_to_ovpn(profile_path, username, password, timeout):
                 # Log the IP address after successful connection
                 ip_address = get_public_ip()
                 log_and_print(f"Current IP address: {ip_address}", level="info", color=Fore.GREEN)
+                return True
             else:
                 log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
         except subprocess.TimeoutExpired:
@@ -78,7 +79,7 @@ def connect_to_ovpn(profile_path, username, password, timeout):
             log_and_print(f"OpenVPN stdout: {stdout.decode()}", level="debug", color=Fore.BLUE)
             log_and_print(f"OpenVPN stderr: {stderr.decode()}", level="debug", color=Fore.BLUE)
 
-        return process.returncode == 0
+        return False
     except Exception as e:
         log_and_print(f"An error occurred: {str(e)}", level="error", color=Fore.RED)
         return False
@@ -106,6 +107,17 @@ def gestion_transmission(status):
         log_and_print(f"Failed to {status} Transmission service: {str(e)}", level="error", color=Fore.RED)
         log_and_print(f"Transmission stderr: {e.stderr.decode()}", level="debug", color=Fore.BLUE)
 
+def is_transmission_running():
+    try:
+        result = subprocess.run(["service", "transmission", "status"], capture_output=True, text=True, check=True)
+        if "is running" in result.stdout:
+            return True
+        else:
+            return False
+    except subprocess.CalledProcessError as e:
+        log_and_print(f"Failed to check Transmission status: {str(e)}", level="error", color=Fore.RED)
+        return False
+
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
     if not ovpn_files:
@@ -126,7 +138,13 @@ def main():
                 if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
                     log_and_print(f"Starting Transmission service after successful VPN connection.", level="info", color=Fore.YELLOW)
                     gestion_transmission("start")
-                    time.sleep(3600)
+                    
+                    # Check every 10 minutes if Transmission is running
+                    for _ in range(6):  # 6 iterations to cover the 60-minute period
+                        time.sleep(600)  # Sleep for 10 minutes
+                        if not is_transmission_running():
+                            log_and_print("Transmission service is not running. Restarting...", level="warning", color=Fore.YELLOW)
+                            gestion_transmission("start")
                 else:
                     log_and_print("Failed to establish VPN connection. Retrying with the next profile.", level="error", color=Fore.RED)
                 
