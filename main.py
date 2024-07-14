@@ -1,7 +1,7 @@
 import os
 import random
-import subprocess
 import tempfile
+import subprocess
 import time
 import logging
 from colorama import init, Fore, Style
@@ -68,17 +68,23 @@ def cooldown(seconds, ip_local, ip_vpn):
 def core(ovpn_file, username, password):
     log_and_print(f"Connecting to VPN server using {ovpn_file}...", color=Fore.GREEN)
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_file.write(f"{username}\n{password}".encode())
-        temp_file.close()
+        temp_file.write(f"{username}\n{password}")
 
-        try:
-            command = ["openvpn", "--config", f"./openvpn/{ovpn_file}", "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
-            run_command(command)
-            log_and_print("VPN connection closed.", color=Fore.YELLOW)
-        except Exception as e:
-            log_and_print(f"Error: {e}", level="error", color=Fore.RED)
-        finally:
-            os.remove(temp_file.name)
+    try:
+        command = ["openvpn", "--config", f"./openvpn/{ovpn_file}", "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        while True:
+            output = process.stdout.readline()
+            if process.poll() is not None:
+                break
+            if output:
+                log_and_print(output.decode().strip(), color=Fore.GREEN)
+            time.sleep(0.1)
+        log_and_print("VPN connection closed.", color=Fore.YELLOW)
+    except Exception as e:
+        log_and_print(f"Error: {e}", level="error", color=Fore.RED)
+    finally:
+        os.remove(temp_file.name)
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
