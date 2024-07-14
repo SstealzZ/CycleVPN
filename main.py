@@ -55,11 +55,14 @@ def connect_to_ovpn(profile_path, username, password, timeout):
 
         command = ["openvpn", "--config", profile_path, "--auth-user-pass", temp_file.name, "--mute-replay-warnings"]
         log_and_print(f"Running command: {' '.join(command)}", level="debug", color=Fore.BLUE)
-        process = subprocess.Popen(command)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         try:
-            process.wait(timeout=timeout)
-            log_and_print("Connection successful.", color=Fore.GREEN, level="info")
+            stdout, stderr = process.communicate(timeout=timeout)
+            if process.returncode == 0:
+                log_and_print("Connection successful.", color=Fore.GREEN, level="info")
+            else:
+                log_and_print(f"OpenVPN error: {stderr.decode()}", level="error", color=Fore.RED)
         except subprocess.TimeoutExpired:
             process.terminate()
             log_and_print("Connection timed out.", level="error", color=Fore.RED)
@@ -68,6 +71,9 @@ def connect_to_ovpn(profile_path, username, password, timeout):
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+            log_and_print(f"OpenVPN stdout: {stdout.decode()}", level="debug", color=Fore.BLUE)
+            log_and_print(f"OpenVPN stderr: {stderr.decode()}", level="debug", color=Fore.BLUE)
 
         return process.returncode == 0
     except Exception as e:
@@ -81,10 +87,12 @@ def gestion_transmission(status):
     log_and_print(f"Transmission service {status}...", color=Fore.YELLOW, level="info")
     command = ["service", "transmission", status]
     try:
-        subprocess.run(command, check=True)
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         log_and_print(f"Transmission service {status}ed successfully.", color=Fore.YELLOW, level="info")
+        log_and_print(f"Transmission stdout: {result.stdout.decode()}", level="debug", color=Fore.BLUE)
     except subprocess.CalledProcessError as e:
         log_and_print(f"Failed to {status} Transmission service: {str(e)}", level="error", color=Fore.RED)
+        log_and_print(f"Transmission stderr: {e.stderr.decode()}", level="debug", color=Fore.BLUE)
 
 def main():
     ovpn_files = get_list_of_ovpn_files("./openvpn")
@@ -99,16 +107,23 @@ def main():
         while True:
             random.shuffle(ovpn_files)
             for ovpn_file in ovpn_files:
+                log_and_print(f"Stopping Transmission service before VPN connection.", level="info", color=Fore.YELLOW)
+                gestion_transmission("stop")
+                
                 log_and_print(f"Attempting to connect using profile: {ovpn_file}", level="info", color=Fore.BLUE)
                 if connect_to_ovpn(f"./openvpn/{ovpn_file}", username, password, 3600):
                     gestion_transmission("start")
                     time.sleep(3600)
-                    gestion_transmission("stop")
                 else:
                     log_and_print("Failed to establish VPN connection. Retrying with the next profile.", level="error", color=Fore.RED)
-                time.sleep(5)
+                
+                log_and_print(f"Stopping Transmission service after VPN disconnection.", level="info", color=Fore.YELLOW)
+                gestion_transmission("stop")
+                time.sleep(5)  # Wait briefly before trying the next profile
     except KeyboardInterrupt:
         log_and_print("Script interrupted by user.", color=Fore.YELLOW, level="warning")
+        log_and_print(f"Stopping Transmission service due to script interruption.", level="info", color=Fore.YELLOW)
+        gestion_transmission("stop")
 
 if __name__ == "__main__":
     main()
