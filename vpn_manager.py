@@ -1,7 +1,5 @@
-import os
 import random
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -36,7 +34,6 @@ class VPNManager:
         
         self.vpn_process = None
         self.current_ovpn_file = None
-        self.temp_credentials_file = None
     
     def discover_ovpn_files(self) -> List[str]:
         """
@@ -85,46 +82,7 @@ class VPNManager:
         self.logger.info("Credentials obtained successfully")
         return username, password
     
-    def create_temporary_credentials_file(self, username: str, password: str) -> str:
-        """
-        Create a temporary file with VPN credentials.
-        
-        Args:
-            username: VPN username
-            password: VPN password
-            
-        Returns:
-            Path to temporary credentials file
-        """
-        temp_dir = self.paths_config['temp_directory']
-        
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            delete=False,
-            dir=temp_dir,
-            prefix='cyclevpn_',
-            suffix='.auth'
-        ) as temp_file:
-            temp_file.write(f"{username}\n{password}")
-            temp_file_path = temp_file.name
-        
-        os.chmod(temp_file_path, 0o600)
-        self.temp_credentials_file = temp_file_path
-        
-        self.logger.debug(f"Created temporary credentials file: {temp_file_path}")
-        return temp_file_path
-    
-    def cleanup_temporary_credentials(self):
-        """
-        Securely remove temporary credentials file.
-        """
-        if self.temp_credentials_file and os.path.exists(self.temp_credentials_file):
-            try:
-                os.remove(self.temp_credentials_file)
-                self.logger.debug("Temporary credentials file removed")
-                self.temp_credentials_file = None
-            except OSError as e:
-                self.logger.error(f"Failed to remove temporary credentials file: {e}")
+
     
     def manage_system_service(self, service_name: str, action: str):
         """
@@ -147,19 +105,26 @@ class VPNManager:
             if result.returncode == 0:
                 self.logger.success(f"Service {service_name} {action}ed successfully")
             else:
-                self.logger.error(f"Failed to {action} service {service_name}: {result.stderr}")
+                stderr_msg = result.stderr.strip()
+                if action == "stop" and ("not running" in stderr_msg.lower() or "inactive" in stderr_msg.lower()):
+                    self.logger.info(f"Service {service_name} was already stopped")
+                elif action == "start" and ("already running" in stderr_msg.lower() or "active" in stderr_msg.lower()):
+                    self.logger.info(f"Service {service_name} was already running")
+                else:
+                    self.logger.error(f"Failed to {action} service {service_name}: {stderr_msg}")
         except subprocess.TimeoutExpired:
             self.logger.error(f"Timeout while trying to {action} service {service_name}")
         except Exception as e:
             self.logger.error(f"Error managing service {service_name}: {e}")
     
-    def connect_to_vpn(self, ovpn_file: str, credentials_file: str) -> bool:
+    def connect_to_vpn(self, ovpn_file: str, username: str, password: str) -> bool:
         """
-        Establish VPN connection using OpenVPN.
+        Establish VPN connection using OpenVPN with secure credential handling.
         
         Args:
             ovpn_file: Name of the OpenVPN configuration file
-            credentials_file: Path to credentials file
+            username: VPN username
+            password: VPN password
             
         Returns:
             True if connection was established successfully, False otherwise
@@ -177,16 +142,21 @@ class VPNManager:
             command = [
                 "openvpn",
                 "--config", str(ovpn_file_path),
-                "--auth-user-pass", credentials_file,
+                "--auth-user-pass", "stdin",
                 "--mute-replay-warnings",
                 "--daemon"
             ]
             
             self.vpn_process = subprocess.Popen(
                 command,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
+            
+            credentials_data = f"{username}\n{password}\n".encode()
+            self.vpn_process.stdin.write(credentials_data)
+            self.vpn_process.stdin.close()
             
             self.logger.info("OpenVPN process started, waiting for connection...")
             time.sleep(self.network_config['vpn_establish_wait'])
@@ -235,7 +205,6 @@ class VPNManager:
         Returns:
             True if session completed successfully, False otherwise
         """
-        credentials_file = None
         session_successful = False
         
         try:
@@ -246,9 +215,7 @@ class VPNManager:
                 "stop"
             )
             
-            credentials_file = self.create_temporary_credentials_file(username, password)
-            
-            if self.connect_to_vpn(ovpn_file, credentials_file):
+            if self.connect_to_vpn(ovpn_file, username, password):
                 self.manage_system_service(
                     self.services_config['transmission_service'],
                     "start"
@@ -274,8 +241,6 @@ class VPNManager:
         
         finally:
             self.disconnect_vpn()
-            if credentials_file:
-                self.cleanup_temporary_credentials()
         
         return session_successful
     
@@ -326,5 +291,4 @@ class VPNManager:
             self.logger.info("VPN rotation stopped by user")
         
         finally:
-            self.disconnect_vpn()
-            self.cleanup_temporary_credentials() 
+            self.disconnect_vpn() 
