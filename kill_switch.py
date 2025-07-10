@@ -149,7 +149,7 @@ class KillSwitch:
         """
         try:
             result = subprocess.run(
-                ["systemctl", "stop", service_name],
+                ["service", service_name, "stop"],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -172,7 +172,7 @@ class KillSwitch:
         """
         try:
             result = subprocess.run(
-                ["systemctl", "start", service_name],
+                ["service", service_name, "start"],
                 capture_output=True,
                 text=True,
                 timeout=10
