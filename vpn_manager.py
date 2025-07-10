@@ -138,7 +138,7 @@ class VPNManager:
         
         try:
             result = subprocess.run(
-                ["systemctl", action, service_name],
+                ["service", service_name, action],
                 capture_output=True,
                 text=True,
                 timeout=30
