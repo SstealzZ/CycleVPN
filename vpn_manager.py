@@ -1,5 +1,7 @@
+import os
 import random
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -34,6 +36,7 @@ class VPNManager:
         
         self.vpn_process = None
         self.current_ovpn_file = None
+        self.temp_credentials_file = None
     
     def discover_ovpn_files(self) -> List[str]:
         """
@@ -82,7 +85,60 @@ class VPNManager:
         self.logger.info("Credentials obtained successfully")
         return username, password
     
-
+    def create_secure_temporary_credentials_file(self, username: str, password: str) -> str:
+        """
+        Create a secure temporary file with VPN credentials.
+        
+        Args:
+            username: VPN username
+            password: VPN password
+            
+        Returns:
+            Path to temporary credentials file
+        """
+        temp_dir = self.paths_config['temp_directory']
+        
+        fd, temp_file_path = tempfile.mkstemp(
+            dir=temp_dir,
+            prefix='cyclevpn_',
+            suffix='.auth'
+        )
+        
+        try:
+            os.fchmod(fd, 0o600)
+            
+            with os.fdopen(fd, 'w') as temp_file:
+                temp_file.write(f"{username}\n{password}")
+            
+            self.temp_credentials_file = temp_file_path
+            self.logger.debug("Secure temporary credentials file created")
+            return temp_file_path
+            
+        except Exception as e:
+            os.close(fd)
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            raise e
+    
+    def secure_cleanup_credentials(self):
+        """
+        Securely remove temporary credentials file with overwrite.
+        """
+        if self.temp_credentials_file and os.path.exists(self.temp_credentials_file):
+            try:
+                file_size = os.path.getsize(self.temp_credentials_file)
+                
+                with open(self.temp_credentials_file, 'r+b') as f:
+                    f.write(os.urandom(file_size))
+                    f.flush()
+                    os.fsync(f.fileno())
+                
+                os.remove(self.temp_credentials_file)
+                self.logger.debug("Temporary credentials file securely removed")
+                self.temp_credentials_file = None
+                
+            except OSError as e:
+                self.logger.error(f"Failed to securely remove credentials file: {e}")
     
     def manage_system_service(self, service_name: str, action: str):
         """
@@ -138,25 +194,23 @@ class VPNManager:
         self.current_ovpn_file = ovpn_file
         self.logger.info(f"Connecting to VPN server using: {ovpn_file}")
         
+        credentials_file = None
         try:
+            credentials_file = self.create_secure_temporary_credentials_file(username, password)
+            
             command = [
                 "openvpn",
                 "--config", str(ovpn_file_path),
-                "--auth-user-pass", "stdin",
+                "--auth-user-pass", credentials_file,
                 "--mute-replay-warnings",
                 "--daemon"
             ]
             
             self.vpn_process = subprocess.Popen(
                 command,
-                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
-            
-            credentials_data = f"{username}\n{password}\n".encode()
-            self.vpn_process.stdin.write(credentials_data)
-            self.vpn_process.stdin.close()
             
             self.logger.info("OpenVPN process started, waiting for connection...")
             time.sleep(self.network_config['vpn_establish_wait'])
@@ -171,6 +225,8 @@ class VPNManager:
                 
         except Exception as e:
             self.logger.error(f"Failed to establish VPN connection: {e}")
+            if credentials_file:
+                self.secure_cleanup_credentials()
             return False
     
     def disconnect_vpn(self):
@@ -191,6 +247,7 @@ class VPNManager:
             self.vpn_process = None
         
         self.kill_switch.kill_vpn_processes()
+        self.secure_cleanup_credentials()
         self.current_ovpn_file = None
     
     def run_vpn_session(self, ovpn_file: str, username: str, password: str) -> bool:
