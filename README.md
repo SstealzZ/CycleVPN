@@ -1,111 +1,80 @@
-# CycleVPN v2.0 - Advanced VPN Rotation Tool
+# CycleVPN v2.0 - Rotation Automatique de Serveurs VPN
 
-CycleVPN est un outil avancé de rotation automatique de serveurs VPN qui permet de changer automatiquement de serveur VPN à intervalles réguliers tout en gérant les services réseau associés.
+Un outil avancé de rotation automatique de serveurs VPN avec kill switch intégré et gestion sécurisée des connexions.
 
-## ✨ Nouvelles Fonctionnalités v2.0
+## ⚡ Fonctionnalités Principales
 
-### 🔧 Architecture Modulaire
-- **Configuration centralisée** : Fichier `config.json` pour tous les paramètres
-- **Logging avancé** : Utilisation de Loguru pour des logs structurés
-- **Kill Switch amélioré** : Protection réseau avancée en cas de défaillance VPN
-- **Gestion de services** : Contrôle automatique des services système
+- **🔄 Rotation automatique** : Change de serveur VPN à intervalles réguliers
+- **🛡️ Kill Switch avancé** : Protège contre les fuites de données en cas de panne VPN
+- **🔒 Sécurité renforcée** : Gestion sécurisée des identifiants et vérification d'IP
+- **📝 Logs avancés** : Système de logging avec rotation automatique
+- **⚙️ Configuration flexible** : Paramètres personnalisables via JSON
+- **🔧 Gestion de services** : Contrôle automatique des services système (Transmission)
 
-### 🛡️ Sécurité Renforcée
-- **Vérification d'IP** : Validation automatique des changements d'IP
-- **Gestion sécurisée des identifiants** : Fichiers temporaires avec permissions restreintes
-- **Arrêt d'urgence** : Fermeture sécurisée en cas de problème critique
-- **Blocage de services** : Empêche les fuites de données en cas d'échec VPN
-
-### 📊 Monitoring et Logging
-- **Logs rotatifs** : Gestion automatique de la taille des logs
-- **Logging coloré** : Interface utilisateur améliorée
-- **Métriques de session** : Suivi des connexions et des échecs
-- **Debugging avancé** : Logs détaillés pour le diagnostic
-
-## 🚀 Installation
+## 🚀 Installation Rapide
 
 ### Prérequis
+```bash
+# Vérifiez que vous avez :
 - Python 3.8+
 - OpenVPN installé
-- Privilèges administrateur (pour la gestion des services)
-- Accès Internet pour la vérification d'IP
+- Privilèges administrateur
+```
 
-### Installation des dépendances
+### Installation
 ```bash
+# Clonez le projet
+git clone https://github.com/votre-repo/CycleVPN.git
+cd CycleVPN
+
+# Installez les dépendances
 pip install -r requirements.txt
+
+# Lancez l'application
+python main.py
+```
+
+## 📁 Structure du Projet
+
+```
+CycleVPN/
+├── main.py              # Application principale
+├── config.json          # Configuration
+├── config_manager.py    # Gestionnaire de configuration
+├── logger_manager.py    # Gestionnaire de logs
+├── kill_switch.py       # Kill switch avancé
+├── vpn_manager.py       # Gestionnaire VPN
+├── openvpn/            # Fichiers .ovpn
+└── requirements.txt    # Dépendances
 ```
 
 ## ⚙️ Configuration
 
-### Fichier de Configuration (`config.json`)
+Le fichier `config.json` contient tous les paramètres configurables :
+
 ```json
 {
-  "network": {
-    "connection_timeout": 10,
-    "vpn_establish_wait": 5,
-    "ip_check_retries": 3,
-    "ip_check_timeout": 5
-  },
   "session": {
-    "cooldown_seconds": 20,
-    "max_connection_failures": 3,
-    "kill_switch_enabled": true
+    "cooldown_seconds": 3600,     // Durée de chaque session (1h)
+    "max_connection_failures": 3,  // Échecs max avant arrêt
+    "kill_switch_enabled": true   // Activer le kill switch
+  },
+  "network": {
+    "connection_timeout": 15,     // Timeout de connexion
+    "vpn_establish_wait": 20,     // Attente établissement VPN
+    "ip_check_retries": 3         // Tentatives de vérification IP
   },
   "services": {
     "transmission_service": "transmission",
     "openvpn_service": "openvpn"
   },
-  "paths": {
-    "ovpn_directory": "./openvpn",
-    "log_file": "cyclevpn.log",
-    "temp_directory": "/tmp"
-  },
   "logging": {
-    "level": "INFO",
-    "rotation": "10 MB",
-    "retention": "7 days",
-    "format": "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
-  },
-  "security": {
-    "clear_credentials_on_exit": true,
-    "secure_temp_files": true,
-    "verify_ip_change": true
+    "level": "INFO",              // Niveau de log
+    "rotation": "10 MB",          // Rotation des logs
+    "retention": "7 days"         // Rétention des logs
   }
 }
 ```
-
-### Paramètres Configurables
-
-#### Réseau
-- `connection_timeout` : Timeout pour les connexions réseau
-- `vpn_establish_wait` : Temps d'attente pour l'établissement VPN
-- `ip_check_retries` : Nombre de tentatives de vérification d'IP
-- `ip_check_timeout` : Timeout pour la vérification d'IP
-
-#### Session
-- `cooldown_seconds` : Durée de chaque session VPN
-- `max_connection_failures` : Nombre maximum d'échecs avant arrêt
-- `kill_switch_enabled` : Activation du kill switch
-
-#### Services
-- `transmission_service` : Nom du service Transmission
-- `openvpn_service` : Nom du service OpenVPN
-
-#### Chemins
-- `ovpn_directory` : Répertoire des fichiers .ovpn
-- `log_file` : Fichier de logs
-- `temp_directory` : Répertoire temporaire
-
-#### Logging
-- `level` : Niveau de log (DEBUG, INFO, WARNING, ERROR)
-- `rotation` : Taille de rotation des logs
-- `retention` : Durée de conservation des logs
-- `format` : Format des messages de log
-
-#### Sécurité
-- `clear_credentials_on_exit` : Effacer les identifiants à la fermeture
-- `secure_temp_files` : Utiliser des fichiers temporaires sécurisés
-- `verify_ip_change` : Vérifier les changements d'IP
 
 ## 🎯 Utilisation
 
@@ -114,155 +83,113 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Structure des Fichiers
-```
-CycleVPN/
-├── main.py                 # Application principale
-├── config.json            # Configuration
-├── requirements.txt       # Dépendances
-├── config_manager.py      # Gestionnaire de configuration
-├── logger_manager.py      # Gestionnaire de logs
-├── kill_switch.py         # Kill switch avancé
-├── vpn_manager.py         # Gestionnaire VPN
-├── openvpn/              # Fichiers de configuration VPN
-│   ├── france.ovpn
-│   ├── us_california.ovpn
-│   └── ...
-└── cyclevpn.log          # Fichier de logs
-```
+L'application vous demandera :
+1. **Identifiants VPN** : Username et password
+2. **Confirmation** : Vérification des prérequis
+3. **Rotation** : Démarrage automatique de la rotation
 
-## 🔄 Fonctionnement
+### Fonctionnement
+1. **Initialisation** : Vérification des fichiers .ovpn et connectivité
+2. **Connexion** : Établissement VPN avec le premier serveur
+3. **Vérification** : Contrôle du changement d'IP
+4. **Rotation** : Changement automatique après le délai configuré
+5. **Protection** : Kill switch en cas de problème
 
-1. **Initialisation** : Chargement de la configuration et vérification des prérequis
-2. **Authentification** : Saisie des identifiants VPN
-3. **Rotation** : Cycle automatique à travers les serveurs VPN
-4. **Monitoring** : Surveillance continue des connexions
-5. **Protection** : Activation du kill switch en cas de problème
+## 🛡️ Kill Switch
 
-## 🛡️ Kill Switch Avancé
-
-Le kill switch v2.0 offre plusieurs niveaux de protection :
+Le kill switch protège contre les fuites de données :
 
 ### Protection Automatique
-- **Vérification d'IP** : Contrôle que l'IP a bien changé
-- **Monitoring des processus** : Surveillance des processus OpenVPN
-- **Arrêt des services** : Fermeture automatique des services en cas d'échec
+- **Vérification d'IP** : Contrôle que l'IP a changé
+- **Monitoring VPN** : Surveillance des processus OpenVPN
+- **Arrêt des services** : Fermeture automatique si VPN échoue
 
-### Activation Manuelle
-- **Blocage immédiat** : Fermeture de tous les services réseau
-- **Arrêt d'urgence** : Fermeture sécurisée de l'application
-- **Nettoyage** : Suppression des fichiers temporaires
+### Activation d'Urgence
+- **Ctrl+C** : Arrêt propre avec kill switch
+- **Blocage réseau** : Fermeture de tous les services sensibles
+- **Nettoyage** : Suppression sécurisée des fichiers temporaires
 
-## 📋 Architecture du Code
+## 📊 Logs et Monitoring
 
-### Modules Principaux
+Les logs sont disponibles dans `cyclevpn.log` :
+- Connexions/déconnexions VPN
+- Changements d'IP
+- Erreurs et diagnostics
+- Activité du kill switch
 
-#### ConfigManager
-- Gestion centralisée de la configuration
-- Validation des paramètres
-- Création automatique des répertoires
-
-#### LoggerManager  
-- Logging avec Loguru
-- Rotation et rétention automatiques
-- Logs colorés pour la console
-
-#### KillSwitch
-- Protection réseau avancée
-- Vérification d'IP multi-services
-- Gestion des processus système
-
-#### VPNManager
-- Gestion des connexions VPN
-- Rotation automatique des serveurs
-- Intégration avec les services système
-
-#### CycleVPNApplication
-- Orchestration des composants
-- Gestion des signaux système
-- Interface utilisateur
-
-## 🔧 Développement
-
-### Ajout de Nouveaux Fournisseurs VPN
-1. Ajouter les fichiers `.ovpn` dans le répertoire `openvpn/`
-2. Modifier la configuration si nécessaire
-3. Tester la connexion
-
-### Personnalisation des Services
-1. Modifier `services` dans `config.json`
-2. Adapter les commandes dans `VPNManager`
-3. Tester la gestion des services
-
-### Extension du Kill Switch
-1. Ajouter de nouvelles méthodes dans `KillSwitch`
-2. Intégrer avec `VPNManager`
-3. Tester les scénarios d'échec
-
-## 📊 Monitoring
-
-### Logs Disponibles
-- **Connexions VPN** : Établissement et fermeture
-- **Changements d'IP** : Vérification et validation
-- **Gestion des services** : Démarrage et arrêt
-- **Erreurs** : Diagnostic et debugging
-
-### Métriques
-- Taux de succès des connexions
-- Temps de réponse des services
-- Historique des changements d'IP
-- Statistiques d'utilisation
-
-## 🚨 Dépannage
-
-### Problèmes Courants
-1. **Pas de fichiers .ovpn** : Vérifier le répertoire `openvpn/`
-2. **Permissions insuffisantes** : Exécuter avec privilèges administrateur
-3. **Services non trouvés** : Vérifier les noms dans `config.json`
-4. **Pas de connexion Internet** : Vérifier la connectivité réseau
-
-### Logs de Debug
-```bash
-# Modifier le niveau de log dans config.json
+Pour plus de détails, changez le niveau de log :
+```json
 "logging": {
     "level": "DEBUG"
 }
 ```
 
+## 🔧 Personnalisation
+
+### Ajouter des Serveurs VPN
+1. Placez vos fichiers `.ovpn` dans le dossier `openvpn/`
+2. Relancez l'application
+
+### Modifier les Services
+```json
+"services": {
+    "transmission_service": "votre-service",
+    "openvpn_service": "openvpn"
+}
+```
+
+### Ajuster les Timings
+```json
+"session": {
+    "cooldown_seconds": 1800,  // 30 minutes
+    "max_connection_failures": 5
+}
+```
+
+## 🚨 Dépannage
+
+### Problèmes Courants
+| Problème | Solution |
+|----------|----------|
+| Pas de fichiers .ovpn | Placez vos fichiers dans `openvpn/` |
+| Permissions refusées | Lancez avec privilèges administrateur |
+| Service non trouvé | Vérifiez les noms dans `config.json` |
+| IP inchangée | Vérifiez votre configuration VPN |
+
+### Débuggage
+```bash
+# Activez les logs détaillés
+# Dans config.json : "level": "DEBUG"
+
+# Vérifiez les logs
+tail -f cyclevpn.log
+```
+
 ## 🔒 Sécurité
 
-### Bonnes Pratiques
-- Utiliser des identifiants uniques pour chaque service VPN
-- Activer le kill switch pour toutes les sessions
-- Vérifier régulièrement les logs
-- Maintenir les fichiers de configuration sécurisés
+- **Identifiants** : Stockage temporaire sécurisé avec permissions restreintes
+- **Nettoyage** : Suppression automatique des fichiers d'authentification
+- **Vérification** : Contrôle obligatoire des changements d'IP
+- **Kill Switch** : Protection contre les fuites de données
 
-### Fichiers Sensibles
-- `config.json` : Paramètres de configuration
-- Fichiers temporaires : Supprimés automatiquement
-- Logs : Peuvent contenir des informations sensibles
+## 📋 Dépendances
 
-## 📞 Support
-
-Pour toute question ou problème :
-1. Consulter les logs dans `cyclevpn.log`
-2. Vérifier la configuration dans `config.json`
-3. Tester manuellement les connexions VPN
-4. Augmenter le niveau de debug si nécessaire
+```
+colorama>=0.4.6    # Interface colorée
+loguru>=0.7.2      # Logging avancé
+requests>=2.31.0   # Vérification d'IP
+psutil>=5.9.0      # Gestion des processus
+```
 
 ## 🎉 Fonctionnalités Avancées
 
-### Rotation Intelligente
-- Mélange aléatoire des serveurs
-- Évitement des serveurs défaillants
-- Optimisation des temps de connexion
+- **Mélange aléatoire** : Ordre des serveurs randomisé
+- **Récupération automatique** : Retry en cas d'échec
+- **Arrêt propre** : Gestion des signaux système
+- **Monitoring continu** : Surveillance des processus VPN
 
-### Gestion d'Erreurs
-- Récupération automatique des échecs
-- Retry logic configurables
-- Escalade des erreurs critiques
+---
 
-### Intégration Système
-- Gestion des signaux Unix
-- Arrêt propre sur interruption
-- Nettoyage automatique des ressources 
+**Version** : 2.0  
+**Licence** : MIT  
+**Support** : Consultez les logs pour le diagnostic 
