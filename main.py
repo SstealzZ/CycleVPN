@@ -153,7 +153,6 @@ class CycleVPNApplication:
         try:
             self.emergency_stop_transmission()
             self.vpn_manager.disconnect_vpn()
-            self.vpn_manager.cleanup_temporary_credentials()
             
             if self.config_manager.get_security_config()['clear_credentials_on_exit']:
                 self.logger_manager.info("Clearing credentials for security")
