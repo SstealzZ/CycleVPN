@@ -212,6 +212,32 @@ class KillSwitch:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
     
+    def kill_transmission_processes(self):
+        """
+        Terminate all Transmission processes for security.
+        """
+        killed_processes = []
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if 'transmission' in proc.info['name'].lower():
+                    proc.terminate()
+                    killed_processes.append(proc.info['pid'])
+                    self.logger.warning(f"Terminated Transmission process: {proc.info['pid']}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+        
+        if killed_processes:
+            time.sleep(2)
+            for pid in killed_processes:
+                try:
+                    proc = psutil.Process(pid)
+                    if proc.is_running():
+                        proc.kill()
+                        self.logger.error(f"Force killed Transmission process: {pid}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+    
     def activate_kill_switch(self, services_to_block: List[str] = None):
         """
         Activate the kill switch to protect against data leakage.
@@ -230,6 +256,7 @@ class KillSwitch:
         self.logger.error("Blocking network services to prevent data leakage...", Fore.RED)
         
         self.kill_vpn_processes()
+        self.kill_transmission_processes()
         self.block_network_services(services_to_block)
         
         self.logger.error("All network services have been blocked for security", Fore.RED)
@@ -240,6 +267,7 @@ class KillSwitch:
         Emergency shutdown of the application with full network protection.
         """
         self.logger.error("EMERGENCY SHUTDOWN INITIATED", Fore.RED)
+        self.kill_transmission_processes()
         self.activate_kill_switch(['transmission', 'openvpn'])
         self.logger.error("Application terminated for security reasons", Fore.RED)
         sys.exit(1) 
