@@ -156,6 +156,7 @@ class CycleVPNApplication:
             
             if self.config_manager.get_security_config()['clear_credentials_on_exit']:
                 self.logger_manager.info("Clearing credentials for security")
+                self.vpn_manager.secure_cleanup_credentials()
             
             self.logger_manager.success("CycleVPN shutdown completed")
             
