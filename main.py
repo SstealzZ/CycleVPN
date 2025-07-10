@@ -1,5 +1,6 @@
 import sys
 import signal
+import subprocess
 from pathlib import Path
 from colorama import init, Fore
 
@@ -150,6 +151,7 @@ class CycleVPNApplication:
         self.logger_manager.info("Shutting down CycleVPN...")
         
         try:
+            self.emergency_stop_transmission()
             self.vpn_manager.disconnect_vpn()
             self.vpn_manager.cleanup_temporary_credentials()
             
@@ -163,6 +165,47 @@ class CycleVPNApplication:
         
         finally:
             sys.exit(0)
+    
+    def emergency_stop_transmission(self):
+        """
+        Emergency stop of transmission using multiple methods.
+        """
+        self.logger_manager.warning("EMERGENCY: Stopping Transmission to prevent data leaks")
+        
+        try:
+            self.kill_switch.kill_transmission_processes()
+            self.logger_manager.success("Transmission processes terminated")
+            return
+        except Exception as e:
+            self.logger_manager.error(f"Failed to kill Transmission processes: {e}")
+        
+        methods = [
+            ["service", "transmission", "stop"],
+            ["systemctl", "stop", "transmission"],
+            ["brew", "services", "stop", "transmission"],
+            ["launchctl", "stop", "transmission"],
+            ["pkill", "-f", "transmission"]
+        ]
+        
+        for method in methods:
+            try:
+                result = subprocess.run(
+                    method,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    self.logger_manager.success(f"Transmission stopped using: {' '.join(method)}")
+                    return
+                else:
+                    self.logger_manager.debug(f"Method failed: {' '.join(method)}")
+            except Exception as e:
+                self.logger_manager.debug(f"Method error {' '.join(method)}: {e}")
+        
+        self.logger_manager.error("Could not stop Transmission automatically!")
+        self.logger_manager.error("SECURITY WARNING: Please stop Transmission manually!")
+        self.logger_manager.error("Your real IP may be exposed!")
 
 
 def main():
